@@ -27,13 +27,13 @@
       text-align: center;
     }
     th { background: #f0f2f5; }
-    .score { font-weight: bold; }
+    .risk { font-weight: bold; }
   </style>
 </head>
 
 <body>
 
-<h1>📉 黑天鹅股票扫描器（V1 · stooq）</h1>
+<h1>📉 黑天鹅股票扫描器（V1 · Finnhub）</h1>
 <button onclick="loadStocks()">加载真实美股数据</button>
 
 <table id="stockTable">
@@ -56,70 +56,63 @@
 </table>
 
 <script>
-const SYMBOLS = [
-  { symbol: "AAPL.US", name: "Apple" },
-  { symbol: "MSFT.US", name: "Microsoft" },
-  { symbol: "TSLA.US", name: "Tesla" },
-  { symbol: "AMZN.US", name: "Amazon" },
-  { symbol: "META.US", name: "Meta" }
+/** ===== 配置区 ===== */
+const API_KEY = "d5ljrhhr01qlna889r6gd5ljrhhr01qlna889r70";
+
+const STOCKS = [
+  { symbol: "AAPL", name: "Apple" },
+  { symbol: "MSFT", name: "Microsoft" },
+  { symbol: "TSLA", name: "Tesla" },
+  { symbol: "AMZN", name: "Amazon" },
+  { symbol: "META", name: "Meta" }
 ];
 
-function stooqUrl(symbol) {
-  return `https://stooq.pl/q/l/?s=${symbol}&f=sd2t2ohlcv&h&e=csv`;
-}
-
-function corsProxy(url) {
-  return `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
-}
-
+/** ===== 主逻辑 ===== */
 async function loadStocks() {
   const tbody = document.querySelector("#stockTable tbody");
   tbody.innerHTML = "";
 
-  for (const stock of SYMBOLS) {
+  for (const stock of STOCKS) {
     try {
-      const res = await fetch(corsProxy(stooqUrl(stock.symbol)));
-      const csv = (await res.text()).trim();
+      const url = `https://finnhub.io/api/v1/quote?symbol=${stock.symbol}&token=${API_KEY}`;
+      const res = await fetch(url);
+      const data = await res.json();
 
-      const lines = csv.split("\n").filter(l => l && !l.startsWith("Symbol"));
-      if (lines.length === 0) throw new Error("无有效行情");
-
-      const cols = lines[0].split(",");
-
-      const open  = parseFloat(cols[3]);
-      const close = parseFloat(cols[6]);
-      const volume = parseFloat(cols[7]);
-
-      if (isNaN(open) || isNaN(close)) {
-        throw new Error("价格缺失");
+      if (!data || data.c === 0) {
+        throw new Error("无有效数据");
       }
 
+      const open = data.o;
+      const close = data.c;
       const changePct = ((close - open) / open) * 100;
 
-      let status = "正常";
-      let conclusion = "未发现异常";
+      let risk = "正常";
+      let conclusion = "未发现明显异常";
 
       if (changePct < -8) {
-        status = "⚠️ 黑天鹅观察";
-        conclusion = "疑似突发性风险，需事件复盘";
+        risk = "⚠️ 黑天鹅观察";
+        conclusion = "疑似突发性下跌，建议核查新闻 / 财报 / 政策事件";
       }
 
       const tr = document.createElement("tr");
       tr.innerHTML = `
-        <td>${stock.symbol.replace(".US","")}</td>
+        <td>${stock.symbol}</td>
         <td>${stock.name}</td>
         <td>${close.toFixed(2)}</td>
         <td>${changePct.toFixed(2)}%</td>
-        <td>${isNaN(volume) ? "-" : volume.toLocaleString()}</td>
-        <td class="score">${status}</td>
+        <td>-</td>
+        <td class="risk">${risk}</td>
         <td>${conclusion}</td>
       `;
       tbody.appendChild(tr);
 
+      // 防止触发免费 API 频率限制
+      await new Promise(r => setTimeout(r, 500));
+
     } catch (err) {
       const tr = document.createElement("tr");
       tr.innerHTML = `
-        <td>${stock.symbol.replace(".US","")}</td>
+        <td>${stock.symbol}</td>
         <td colspan="6">数据加载失败</td>
       `;
       tbody.appendChild(tr);
