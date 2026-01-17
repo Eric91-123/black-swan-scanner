@@ -1,11 +1,67 @@
-<script>
-/**
- * V1 数据源方案
- * stooq（免费） + AllOrigins（免费 CORS 代理）
- * 无需 API Key
- */
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <title>黑天鹅股票扫描器 V1</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto;
+      background: #f7f8fa;
+      padding: 20px;
+    }
+    h1 {
+      margin-bottom: 10px;
+    }
+    button {
+      padding: 8px 14px;
+      font-size: 14px;
+      cursor: pointer;
+      margin-bottom: 15px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      background: #fff;
+    }
+    th, td {
+      border: 1px solid #ddd;
+      padding: 8px;
+      text-align: center;
+    }
+    th {
+      background: #f0f2f5;
+    }
+    .score {
+      font-weight: bold;
+    }
+  </style>
+</head>
 
-// 先固定一批美股 Demo（后续可扩展为动态扫描）
+<body>
+
+<h1>📉 黑天鹅股票扫描器（V1 · stooq）</h1>
+<button onclick="loadStocks()">加载真实美股数据</button>
+
+<table id="stockTable">
+  <thead>
+    <tr>
+      <th>代码</th>
+      <th>公司</th>
+      <th>最新价</th>
+      <th>当日涨跌</th>
+      <th>成交量</th>
+      <th>风险状态</th>
+      <th>分析结论</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td colspan="7">点击上方按钮加载数据</td>
+    </tr>
+  </tbody>
+</table>
+
+<script>
 const SYMBOLS = [
   { symbol: "AAPL.US", name: "Apple" },
   { symbol: "MSFT.US", name: "Microsoft" },
@@ -14,17 +70,14 @@ const SYMBOLS = [
   { symbol: "META.US", name: "Meta" }
 ];
 
-// 构造 stooq CSV 地址
 function stooqUrl(symbol) {
   return `https://stooq.pl/q/l/?s=${symbol}&f=sd2t2ohlcv&h&e=csv`;
 }
 
-// 使用 AllOrigins 解决浏览器 CORS
 function corsProxy(url) {
   return `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
 }
 
-// 加载股票数据
 async function loadStocks() {
   const tbody = document.querySelector("#stockTable tbody");
   tbody.innerHTML = "<tr><td colspan='7'>加载中...</td></tr>";
@@ -36,21 +89,20 @@ async function loadStocks() {
       const res = await fetch(corsProxy(stooqUrl(stock.symbol)));
       const text = await res.text();
 
-      // CSV 解析
       const lines = text.trim().split("\n");
-      const values = lines[1].split(",");
+      if (lines.length < 2) throw new Error("无有效数据");
 
-      const close = parseFloat(values[6]);
-      const open = parseFloat(values[3]);
+      const v = lines[1].split(",");
+      const open = parseFloat(v[3]);
+      const close = parseFloat(v[6]);
       const changePct = ((close - open) / open) * 100;
 
-      // 黑天鹅初筛逻辑（V1）
-      let swan = "正常波动";
-      let conclusion = "未发现极端风险";
+      let status = "正常";
+      let conclusion = "未发现异常";
 
       if (changePct < -8) {
-        swan = "⚠️ 黑天鹅观察";
-        conclusion = "需复盘事件：政策 / 财报 / 行业冲击";
+        status = "⚠️ 黑天鹅观察";
+        conclusion = "疑似突发性风险，需事件复盘";
       }
 
       const tr = document.createElement("tr");
@@ -60,19 +112,19 @@ async function loadStocks() {
         <td>${close.toFixed(2)}</td>
         <td>${changePct.toFixed(2)}%</td>
         <td>-</td>
-        <td class="score">${swan}</td>
+        <td class="score">${status}</td>
         <td>${conclusion}</td>
       `;
       tbody.appendChild(tr);
 
-    } catch (err) {
+    } catch (e) {
       const tr = document.createElement("tr");
-      tr.innerHTML = `
-        <td>${stock.symbol}</td>
-        <td colspan="6">❌ 数据加载失败</td>
-      `;
+      tr.innerHTML = `<td>${stock.symbol}</td><td colspan="6">数据加载失败</td>`;
       tbody.appendChild(tr);
     }
   }
 }
 </script>
+
+</body>
+</html>
