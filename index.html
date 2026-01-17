@@ -9,9 +9,7 @@
       background: #f7f8fa;
       padding: 20px;
     }
-    h1 {
-      margin-bottom: 10px;
-    }
+    h1 { margin-bottom: 10px; }
     button {
       padding: 8px 14px;
       font-size: 14px;
@@ -28,12 +26,8 @@
       padding: 8px;
       text-align: center;
     }
-    th {
-      background: #f0f2f5;
-    }
-    .score {
-      font-weight: bold;
-    }
+    th { background: #f0f2f5; }
+    .score { font-weight: bold; }
   </style>
 </head>
 
@@ -80,29 +74,27 @@ function corsProxy(url) {
 
 async function loadStocks() {
   const tbody = document.querySelector("#stockTable tbody");
-  tbody.innerHTML = "<tr><td colspan='7'>加载中...</td></tr>";
-
   tbody.innerHTML = "";
 
   for (const stock of SYMBOLS) {
     try {
       const res = await fetch(corsProxy(stooqUrl(stock.symbol)));
-      const text = await res.text();
+      const csv = (await res.text()).trim();
 
-      const lines = text.trim().split("\n");
-      if (lines.length < 2) throw new Error("无有效数据");
+      const lines = csv.split("\n").filter(l => l && !l.startsWith("Symbol"));
+      if (lines.length === 0) throw new Error("无有效行情");
 
-      const v = lines[1].split(",");
-      const open = parseFloat(v[3]);
-const close = parseFloat(v[6]);
-const volume = parseFloat(v[7]);
+      const cols = lines[0].split(",");
 
-if (isNaN(open) || isNaN(close)) {
-  throw new Error("价格数据缺失");
-}
+      const open  = parseFloat(cols[3]);
+      const close = parseFloat(cols[6]);
+      const volume = parseFloat(cols[7]);
 
-const changePct = ((close - open) / open) * 100;
+      if (isNaN(open) || isNaN(close)) {
+        throw new Error("价格缺失");
+      }
 
+      const changePct = ((close - open) / open) * 100;
 
       let status = "正常";
       let conclusion = "未发现异常";
@@ -114,20 +106,22 @@ const changePct = ((close - open) / open) * 100;
 
       const tr = document.createElement("tr");
       tr.innerHTML = `
-        <td>${stock.symbol.replace(".US", "")}</td>
+        <td>${stock.symbol.replace(".US","")}</td>
         <td>${stock.name}</td>
         <td>${close.toFixed(2)}</td>
         <td>${changePct.toFixed(2)}%</td>
         <td>${isNaN(volume) ? "-" : volume.toLocaleString()}</td>
-
         <td class="score">${status}</td>
         <td>${conclusion}</td>
       `;
       tbody.appendChild(tr);
 
-    } catch (e) {
+    } catch (err) {
       const tr = document.createElement("tr");
-      tr.innerHTML = `<td>${stock.symbol}</td><td colspan="6">数据加载失败</td>`;
+      tr.innerHTML = `
+        <td>${stock.symbol.replace(".US","")}</td>
+        <td colspan="6">数据加载失败</td>
+      `;
       tbody.appendChild(tr);
     }
   }
