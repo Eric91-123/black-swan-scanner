@@ -94,8 +94,15 @@ async function loadStocks() {
 
       const v = lines[1].split(",");
       const open = parseFloat(v[3]);
-      const close = parseFloat(v[6]);
-      const changePct = ((close - open) / open) * 100;
+const close = parseFloat(v[6]);
+const volume = parseFloat(v[7]);
+
+if (isNaN(open) || isNaN(close)) {
+  throw new Error("价格数据缺失");
+}
+
+const changePct = ((close - open) / open) * 100;
+
 
       let status = "正常";
       let conclusion = "未发现异常";
@@ -111,7 +118,8 @@ async function loadStocks() {
         <td>${stock.name}</td>
         <td>${close.toFixed(2)}</td>
         <td>${changePct.toFixed(2)}%</td>
-        <td>-</td>
+        <td>${isNaN(volume) ? "-" : volume.toLocaleString()}</td>
+
         <td class="score">${status}</td>
         <td>${conclusion}</td>
       `;
