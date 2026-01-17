@@ -1,90 +1,78 @@
-<!DOCTYPE html>
-<html lang="zh">
-<head>
-  <meta charset="UTF-8" />
-  <title>黑天鹅股票分析系统</title>
-  <style>
-    body { font-family: Arial, sans-serif; background:#f7f8fa; padding:20px; }
-    h1 { color:#222; }
-    table { border-collapse: collapse; width:100%; background:#fff; }
-    th, td { border:1px solid #ddd; padding:8px; text-align:center; }
-    th { background:#f0f0f0; }
-    .score { font-weight:bold; }
-  </style>
-</head>
-
-<body>
-
-<h1>🦢 黑天鹅股票分析系统（美股 Demo）</h1>
-
-<p>
-逻辑：筛选近期出现“极端下跌”的股票，判断是否属于<br>
-<strong>事件冲击 / 情绪错杀 / 业务崩坏</strong>
-</p>
-
-<button onclick="loadStocks()">加载真实美股数据</button>
-
-<br><br>
-
-<table id="stockTable">
-  <thead>
-    <tr>
-      <th>代码</th>
-      <th>公司</th>
-      <th>价格</th>
-      <th>日涨跌</th>
-      <th>市值(亿美元)</th>
-      <th>黑天鹅判断</th>
-      <th>研究结论</th>
-    </tr>
-  </thead>
-  <tbody></tbody>
-</table>
-
 <script>
-const API_KEY = "1Y8JOonWgfa7av3t8rPElUlGP5SNnWBz";
+/**
+ * V1 数据源方案
+ * stooq（免费） + AllOrigins（免费 CORS 代理）
+ * 无需 API Key
+ */
 
+// 先固定一批美股 Demo（后续可扩展为动态扫描）
+const SYMBOLS = [
+  { symbol: "AAPL.US", name: "Apple" },
+  { symbol: "MSFT.US", name: "Microsoft" },
+  { symbol: "TSLA.US", name: "Tesla" },
+  { symbol: "AMZN.US", name: "Amazon" },
+  { symbol: "META.US", name: "Meta" }
+];
+
+// 构造 stooq CSV 地址
+function stooqUrl(symbol) {
+  return `https://stooq.pl/q/l/?s=${symbol}&f=sd2t2ohlcv&h&e=csv`;
+}
+
+// 使用 AllOrigins 解决浏览器 CORS
+function corsProxy(url) {
+  return `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
+}
+
+// 加载股票数据
 async function loadStocks() {
   const tbody = document.querySelector("#stockTable tbody");
-  tbody.innerHTML = "加载中...";
+  tbody.innerHTML = "<tr><td colspan='7'>加载中...</td></tr>";
 
-  const url = `https://financialmodelingprep.com/api/v3/stock_market/actives?apikey=${API_KEY}`;
+  tbody.innerHTML = "";
 
-  try {
-    const res = await fetch(url);
-    const data = await res.json();
+  for (const stock of SYMBOLS) {
+    try {
+      const res = await fetch(corsProxy(stooqUrl(stock.symbol)));
+      const text = await res.text();
 
-    tbody.innerHTML = "";
+      // CSV 解析
+      const lines = text.trim().split("\n");
+      const values = lines[1].split(",");
 
-    data.slice(0, 10).forEach(stock => {
-      const change = stock.changesPercentage || 0;
+      const close = parseFloat(values[6]);
+      const open = parseFloat(values[3]);
+      const changePct = ((close - open) / open) * 100;
 
+      // 黑天鹅初筛逻辑（V1）
       let swan = "正常波动";
-      let conclusion = "无明显错杀";
+      let conclusion = "未发现极端风险";
 
-      if (change < -8) {
+      if (changePct < -8) {
         swan = "⚠️ 黑天鹅观察";
-        conclusion = "需判断事件冲击 vs 情绪恐慌";
+        conclusion = "需复盘事件：政策 / 财报 / 行业冲击";
       }
 
       const tr = document.createElement("tr");
       tr.innerHTML = `
-        <td>${stock.symbol}</td>
-        <td>${stock.name || "-"}</td>
-        <td>${stock.price}</td>
-        <td>${change.toFixed(2)}%</td>
-        <td>${(stock.marketCap/1e9).toFixed(1)}</td>
+        <td>${stock.symbol.replace(".US", "")}</td>
+        <td>${stock.name}</td>
+        <td>${close.toFixed(2)}</td>
+        <td>${changePct.toFixed(2)}%</td>
+        <td>-</td>
         <td class="score">${swan}</td>
         <td>${conclusion}</td>
       `;
       tbody.appendChild(tr);
-    });
 
-  } catch (e) {
-    tbody.innerHTML = "❌ 数据加载失败，请检查 API Key";
+    } catch (err) {
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td>${stock.symbol}</td>
+        <td colspan="6">❌ 数据加载失败</td>
+      `;
+      tbody.appendChild(tr);
+    }
   }
 }
 </script>
-
-</body>
-</html>
