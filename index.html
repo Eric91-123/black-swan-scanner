@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8" />
-  <title>黑天鹅股票扫描器 · V2</title>
+  <title>黑天鹅股票扫描器 V2</title>
   <style>
     body {
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto;
@@ -11,142 +11,180 @@
     }
     h1 { margin-bottom: 10px; }
     button {
-      padding: 10px 16px;
+      padding: 8px 14px;
       font-size: 14px;
       cursor: pointer;
-      margin-bottom: 20px;
+      margin-bottom: 15px;
     }
+    input { padding: 6px; margin-right: 8px; }
     table {
       width: 100%;
       border-collapse: collapse;
       background: #fff;
+      margin-top: 10px;
     }
     th, td {
       border: 1px solid #ddd;
       padding: 8px;
       text-align: center;
-      font-size: 13px;
     }
     th { background: #f0f2f5; }
     .score { font-weight: bold; }
-    .danger { color: #d4380d; }
   </style>
 </head>
 
 <body>
+<h1>📉 黑天鹅股票扫描器（V2 · 年度跌幅30%以上）</h1>
 
-<h1>📉 黑天鹅股票扫描器（V2 · 30% 跌幅筛选）</h1>
-<button onclick="scanStocks()">开始扫描</button>
+<!-- 扫描按钮 -->
+<button onclick="scanStocks()">扫描年度跌幅≥30%股票</button>
 
-<table>
+<!-- 定向股票分析 -->
+<input type="text" id="customSymbol" placeholder="输入股票代码，例如AAPL" />
+<button onclick="analyzeStock()">分析指定股票</button>
+
+<!-- 扫描结果表 -->
+<h2>年度跌幅≥30%股票清单</h2>
+<table id="stockTable">
   <thead>
     <tr>
       <th>代码</th>
-      <th>30日跌幅</th>
+      <th>公司</th>
       <th>最新价</th>
-      <th>评分</th>
-      <th>状态</th>
-      <th>结论</th>
+      <th>跌幅</th>
+      <th>成交量</th>
+      <th>风险状态</th>
+      <th>分析结论</th>
     </tr>
   </thead>
-  <tbody id="resultBody">
-    <tr><td colspan="6">点击按钮开始扫描</td></tr>
+  <tbody>
+    <tr>
+      <td colspan="7">点击上方按钮扫描数据</td>
+    </tr>
   </tbody>
 </table>
 
-<script>
-const API_KEY = "d5ljrhhr01qlna889r6gd5ljrhhr01qlna889r70";
+<!-- 定向分析结果 -->
+<h2>定向股票分析报告</h2>
+<div id="customReport">输入股票代码并点击分析按钮</div>
 
+<script>
 const SYMBOLS = [
-  "AAPL","MSFT","AMZN","META","TSLA",
-  "NVDA","AMD","NFLX","BABA","PYPL",
-  "INTC","UBER","COIN","SNAP","SHOP",
-  "BA","DIS","SQ","PLTR","ROKU"
+  { symbol: "AAPL.US", name: "Apple" },
+  { symbol: "MSFT.US", name: "Microsoft" },
+  { symbol: "TSLA.US", name: "Tesla" },
+  { symbol: "AMZN.US", name: "Amazon" },
+  { symbol: "META.US", name: "Meta" },
+  { symbol: "GOOGL.US", name: "Alphabet" },
+  { symbol: "NVDA.US", name: "NVIDIA" },
+  { symbol: "NFLX.US", name: "Netflix" },
+  { symbol: "BABA.US", name: "Alibaba" },
+  { symbol: "JPM.US", name: "JP Morgan" },
+  { symbol: "DIS.US", name: "Disney" },
+  { symbol: "ADBE.US", name: "Adobe" },
+  { symbol: "PYPL.US", name: "PayPal" },
+  { symbol: "INTC.US", name: "Intel" },
+  { symbol: "CSCO.US", name: "Cisco" },
+  { symbol: "ORCL.US", name: "Oracle" },
+  { symbol: "CRM.US", name: "Salesforce" },
+  { symbol: "UBER.US", name: "Uber" },
+  { symbol: "LYFT.US", name: "Lyft" },
+  { symbol: "SQ.US", name: "Block" }
 ];
 
-function toUnix(daysAgo = 0) {
-  return Math.floor(Date.now() / 1000) - daysAgo * 86400;
-}
+const FINNHUB_KEY = "d5ljrhhr01qlna889r6gd5ljrhhr01qlna889r70";
 
-async function fetchCandles(symbol) {
-  const url = `https://finnhub.io/api/v1/stock/candle?symbol=${symbol}&resolution=D&from=${toUnix(45)}&to=${toUnix()}&token=${API_KEY}`;
+// 调用 Finnhub API 获取股票历史数据
+async function fetchStockHistory(symbol, resolution="D", from, to) {
+  const url = `https://finnhub.io/api/v1/stock/candle?symbol=${symbol}&resolution=${resolution}&from=${from}&to=${to}&token=${FINNHUB_KEY}`;
   const res = await fetch(url);
   return res.json();
 }
 
-function scoreStock(candles) {
-  const closes = candles.c;
-  const volumes = candles.v;
-
-  const first = closes[0];
-  const last = closes[closes.length - 1];
-  const dropPct = (first - last) / first;
-
-  let score = 0;
-
-  // 跌幅评分（40）
-  score += Math.min(40, dropPct * 100 * 1.3);
-
-  // 放量恐慌（30）
-  const avgVol = volumes.slice(0, 20).reduce((a,b)=>a+b,0)/20;
-  const recentVol = volumes.slice(-5).reduce((a,b)=>a+b,0)/5;
-  if (recentVol > avgVol * 1.3) score += 30;
-
-  // 是否止跌（30）
-  const last5 = closes.slice(-5);
-  if (last5[4] >= last5[0]) score += 30;
-
-  return Math.round(score);
-}
-
+// 扫描年度跌幅≥30%股票
 async function scanStocks() {
-  const tbody = document.getElementById("resultBody");
+  const tbody = document.querySelector("#stockTable tbody");
   tbody.innerHTML = "";
 
-  let results = [];
+  const now = Math.floor(Date.now() / 1000);
+  const oneYearAgo = now - 365 * 24 * 3600;
 
-  for (const symbol of SYMBOLS) {
+  for (const stock of SYMBOLS) {
     try {
-      const data = await fetchCandles(symbol);
-      if (data.s !== "ok" || data.c.length < 20) continue;
+      const data = await fetchStockHistory(stock.symbol, "D", oneYearAgo, now);
 
-      const closes = data.c;
-      const dropPct = (closes[0] - closes[closes.length - 1]) / closes[0];
+      if (data.s !== "ok" || !data.c || data.c.length < 2) throw new Error("数据缺失");
 
-      if (dropPct < 0.3) continue;
+      const oneYearAgoPrice = data.c[0];
+      const currentPrice = data.c[data.c.length - 1];
 
-      const score = scoreStock(data);
+      const dropPct = ((oneYearAgoPrice - currentPrice) / oneYearAgoPrice) * 100;
 
-      results.push({
-        symbol,
-        dropPct,
-        price: closes[closes.length - 1],
-        score
-      });
+      if (dropPct < 30) continue; // 不满足年度跌幅≥30%
 
-    } catch(e) {
-      console.error(symbol, e);
+      // 简单打分逻辑：跌幅越大，回升潜力分越高
+      let score = Math.min(Math.max(dropPct / 2, 1), 10);
+      let status = score > 7 ? "⚠️ 高风险观察" : "正常";
+      let conclusion = score > 7 ? "关注潜在黑天鹅事件" : "未发现重大风险";
+
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td>${stock.symbol.replace(".US","")}</td>
+        <td>${stock.name}</td>
+        <td>${currentPrice.toFixed(2)}</td>
+        <td>${dropPct.toFixed(2)}%</td>
+        <td>-</td>
+        <td class="score">${status}</td>
+        <td>${conclusion}</td>
+      `;
+      tbody.appendChild(tr);
+
+    } catch (err) {
+      const tr = document.createElement("tr");
+      tr.innerHTML = `<td>${stock.symbol.replace(".US","")}</td><td colspan="6">数据加载失败</td>`;
+      tbody.appendChild(tr);
     }
   }
 
-  results.sort((a,b)=>b.score - a.score);
+  if (tbody.innerHTML.trim() === "") {
+    tbody.innerHTML = `<tr><td colspan="7">未发现符合条件的股票</td></tr>`;
+  }
+}
 
-  if (results.length === 0) {
-    tbody.innerHTML = "<tr><td colspan='6'>未发现符合条件的股票</td></tr>";
+// 定向股票分析（基础报告）
+async function analyzeStock() {
+  const symbol = document.getElementById("customSymbol").value.trim();
+  const reportDiv = document.getElementById("customReport");
+  reportDiv.innerHTML = "加载中...";
+
+  if (!symbol) {
+    reportDiv.innerHTML = "请输入有效股票代码";
     return;
   }
 
-  for (const r of results) {
-    const tr = document.createElement("tr");
-    tr.innerHTML = `
-      <td>${r.symbol}</td>
-      <td class="danger">${(r.dropPct*100).toFixed(1)}%</td>
-      <td>${r.price.toFixed(2)}</td>
-      <td class="score">${r.score}</td>
-      <td>${r.score >= 70 ? "⚠️ 黑天鹅" : "观察"}</td>
-      <td>${r.score >= 70 ? "高风险事件后潜在反弹" : "跌幅大，需继续跟踪"}</td>
+  try {
+    const now = Math.floor(Date.now() / 1000);
+    const oneYearAgo = now - 365 * 24 * 3600;
+    const data = await fetchStockHistory(symbol, "D", oneYearAgo, now);
+
+    if (data.s !== "ok") throw new Error("获取数据失败");
+
+    const currentPrice = data.c[data.c.length - 1];
+    const oneYearAgoPrice = data.c[0];
+    const dropPct = ((oneYearAgoPrice - currentPrice) / oneYearAgoPrice) * 100;
+
+    reportDiv.innerHTML = `
+      <strong>股票代码：</strong>${symbol}<br/>
+      <strong>最新价：</strong>${currentPrice.toFixed(2)}<br/>
+      <strong>年度跌幅：</strong>${dropPct.toFixed(2)}%<br/>
+      <strong>黑天鹅事件分析：</strong>模拟分析潜在风险事件<br/>
+      <strong>生存能力评估：</strong>中等<br/>
+      <strong>估值与市场情绪：</strong>参考近期市场波动<br/>
+      <strong>综合结论：</strong>${dropPct >= 30 ? "高风险，需要跟踪" : "风险较低"}
     `;
-    tbody.appendChild(tr);
+
+  } catch (err) {
+    reportDiv.innerHTML = `分析失败：${err.message}`;
   }
 }
 </script>
